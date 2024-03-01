@@ -67,13 +67,16 @@ def get_member():
 
     while True:
         try:
+            # Ask user for member ID or to scan card:
             member = int(input("Please enter the member id, "
                                "or 0 to scan their card: "))
             if member == 0:
+                # Use 'scan' feature:
                 member = user_id(True)
                 print(f"*Beep!* Card {member} accepted.")
                 break
             else:
+                # Check if the ID entered exists in the db:
                 cursor.execute('''SELECT * FROM users WHERE id = ?;'''
                                , (member,))
                 id_list = cursor.fetchone()
@@ -109,11 +112,14 @@ def get_book(scan_type, member_id=None):
 
     while True:
         try:
+            # Asks the user for an ISBN or to 'scan' book:
             book_isbn = int(input("Please enter the book ISBN or "
                                   "0 to scan the book: "))
             if book_isbn > 0 and len(str(book_isbn)) == 13:
+                # A valid ISBN number was entered
                 break
             elif book_isbn == 0:
+                # Run the 'scan' feature:
                 book_isbn = scan_type(member_id)
                 print(f"*Beep!* ISBN: {book_isbn}")
                 break
@@ -122,6 +128,7 @@ def get_book(scan_type, member_id=None):
         except ValueError:
             print("Error: ISBN must be a 13 digit number")
 
+    # Checks if the ISBN is already in the db:
     cursor.execute('''
         SELECT EXISTS(
             SELECT 1 FROM books WHERE isbn = ?);''', (book_isbn,))
@@ -136,16 +143,20 @@ def scan_all_books(member_id=None):
     Parameters
     ----------
     member_id
-        Not required for this function.
+        Not required for this function (see get_book).
 
     Returns
     -------
     int
         A valid ISBN from the database."""
-
+    
+    # Fetches a list of ISBNs from books table:
     cursor.execute('''SELECT isbn FROM books;''')
     isbn_list = cursor.fetchall()
+
+    # Selects an ISBN at random:
     isbn = rd.choice(isbn_list)[0]
+
     return isbn
 
 
@@ -156,13 +167,14 @@ def scan_from_shelf(member_id=None):
     Parameters
     ----------
     member_id
-        Not required for this function.
+        Not required for this function (see get_book).
 
     Returns
     -------
     int
         A valid ISBN from books held in the database that are not on loan."""
 
+    # Fetches a list of ISBNs for books not on loan:
     cursor.execute('''
                     SELECT bk.isbn
                     FROM books AS bk
@@ -174,7 +186,10 @@ def scan_from_shelf(member_id=None):
                     HAVING  MAX(bk.stock) - COUNT(rc.returned) > 0;
                 ''')
     isbn_list = cursor.fetchall()
+
+    # Selects an ISBN at random:
     isbn = rd.choice(isbn_list)[0]
+
     return isbn
 
 
@@ -191,11 +206,15 @@ def scan_from_user(member_id):
     int
         A valid ISBN from the books the member has on loan."""
 
+    # Fetches a list of ISBNs of books on loan with member:
     cursor.execute('''SELECT isbn FROM records
                         WHERE user_id = ? AND returned = 'FALSE';''',
                    (member_id,))
     isbn_list = cursor.fetchall()
+
+    # Selects an ISBN at random:   
     isbn = rd.choice(isbn_list)[0]
+
     return isbn
 
 
@@ -309,11 +328,16 @@ def pay_fine(member_id):
     # Check if a member has an outstanding fine:
     cursor.execute('''SELECT fines FROM users WHERE id = ?;''', (member_id,))
     fine_number = cursor.fetchone()[0]
+
     if fine_number == 0:
+        # Member does not have any fines
         print("No fines to pay.")
     else:
+        # Calculates fine cost:
         fine_total = fine_number * 1.50
         print(f"Please pay £{fine_total:.2f}")
+
+        # Clears the fine (as if been paid):
         print("*Beep!*")
         cursor.execute('''UPDATE users SET fines = 0 WHERE id = ?;''',
                        (member_id,))
@@ -327,18 +351,29 @@ def reward(member_id):
     Parameters
     ----------
     member_id: int
-        The id of the member getting a reward point."""
-
+        The id of the member getting a reward point.
+    
+    Notes
+    -----
+        The borrowing limit is increased by 1 book each time 10 rewards
+        are collected, until 6 books can be borrowed. Rewards are reset
+        each time the borrowing limit is increased."""
+    
+    # Records the reward in the member's record:
     cursor.execute('''
             UPDATE users
             SET rewards = rewards + 1
             WHERE id = ?;''', (member_id,))
     db.commit()
     print("Reward point earned!")
+
+    # Fetches the current borrow limit for the member:
     cursor.execute('''SELECT name, rewards, borrow_limit FROM users 
                     WHERE id = ?;''', (member_id,))
     reward_check = cursor.fetchone()
+
     if reward_check[1] > 9 and reward_check[2] < 6:
+        # Increases borrowing limit if conditions are met:
         print(f"Congratulations to {reward_check[0]}! "
               f"They have earned 10 rewards and can now borrow"
               f" {reward_check[2] + 1} books!")
@@ -358,7 +393,8 @@ def fine(member_id, fine_qty=1):
         The id of the member being given a fine.
     fine_qty: int
         The number of fines. This can be used to charge a larger amount for a lost book."""
-
+    
+    # Records fine in db:
     cursor.execute('''
                 UPDATE users
                 SET fines = fines + ?, rewards = 0, borrow_limit = 3
@@ -368,7 +404,7 @@ def fine(member_id, fine_qty=1):
 
 
 def add_book():
-    """Function to add books to the library stock"""
+    """Function to add books to the library stock."""
 
     book = get_book(scan_all_books)
     if book[1] == 1:
@@ -379,6 +415,7 @@ def add_book():
                                       "How many copies do you wish to "
                                       "add to the stock?: "))
                 if add_stock >= 0:
+                    # Updates number of copies:
                     cursor.execute('''
                             UPDATE books 
                             SET stock = stock + ?
@@ -411,6 +448,7 @@ def add_book():
             except ValueError:
                 print("Error: Book stock must be a whole number.")
 
+        # Records the new book record in books table:
         cursor.execute('''
                 INSERT INTO books(isbn, title, author, stock)
                 VALUES(?,?,?,?);
@@ -427,35 +465,43 @@ def remove_book(ISBN):
     ISBN: int
         The ISBN of the book being removed from stock."""
 
-    # check stock is more than 0
+    # Checks stock is more than 0:
     cursor.execute('''SELECT stock FROM books WHERE isbn = ?;''', (ISBN,))
     stock = cursor.fetchone()[0]
+
     if stock > 0:
         print("Book has stock")
-        # need to know if the lost copy is on loan
+        # Checks if the book is on loan:
         cursor.execute('''
                 SELECT user_id from records 
                 WHERE isbn = ? AND returned = 'FALSE';''', (ISBN,))
         users_list = cursor.fetchall()
         check_list = []
+
         if users_list:
+            # Show who has the book on loan:
             print("The following members currently have the book on loan:")
             for item in users_list:
                 print(item[0])
                 check_list.append(item[0])
             while True:
                 try:
+                    # Asks user if the copy to remove is one on loan:
                     bad_member = int(
                         input("If a member lost / damaged the book, "
                               "please enter their number, "
                               "else enter 0: "))
+                    
                     if bad_member == 0:
+                        # Remove a copy held on shelf
                         if len(check_list) == stock:
                             print(
                                 "Error: All stock is on loan, please enter a user")
                         else:
                             break
+
                     elif bad_member in check_list:
+                        # Returns the book to stock and fines member:
                         return_book(ISBN, bad_member)
                         fine(bad_member, 5)
                         break
@@ -464,12 +510,13 @@ def remove_book(ISBN):
                 except ValueError:
                     print("Error: Invalid member number")
 
-        # reduce stock by 1
+        # Reduce stock of the book by 1:
         cursor.execute(
             '''UPDATE books SET stock = stock - 1 WHERE isbn = ?;''',
             (ISBN,))
         db.commit()
         print("One copy successfully removed from the stock record.")
+
     else:
         print("Error: There are no copies of this book stocked.")
 
@@ -482,7 +529,10 @@ def add_member(user_name):
     user_name: str
         The name of the member being added to the database."""
 
+    # Obtains an ID for the new member:
     new_id = user_id(False)
+
+    # Creates a record for the new member:
     cursor.execute('''
             INSERT INTO users(id, name, fines, rewards, borrow_limit)
             VALUES(?,?,0,0,3);
@@ -504,6 +554,7 @@ def user_id(exists):
     int
         A new random id if exists=False, a random id from database if exists=True."""
 
+    # Fetches a list of existing IDs:
     cursor.execute('''SELECT id FROM users;''')
     id_list = cursor.fetchall()
     _id_list = [i[0] for i in id_list]
