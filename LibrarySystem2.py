@@ -50,6 +50,7 @@ print_loaned_books:
 
 import sqlite3
 import random as rd
+from tabulate import tabulate
 
 
 def get_member():
@@ -560,9 +561,9 @@ def print_book_record(ISBN):
                 ON bk.isbn = rc.isbn
                 WHERE bk.isbn = ?
                 GROUP BY bk.isbn''', (ISBN,))
-    print("ISBN\t\t\tTitle\t\t\t\tAuthor\t\t\t\tCopies Available")
-    for row in cursor:
-        print(f"{row[0]}\t{row[1]}\t\t{row[2]}\t\t{row[3]}")
+    record = cursor.fetchall()
+    headings = ['ISBN', 'Title', 'Author', 'Copies Available']
+    print(tabulate(record, headers=headings))
 
 
 def print_all_books():
@@ -576,9 +577,9 @@ def print_all_books():
                     WHERE returned = 'FALSE') AS rc
                 ON bk.isbn = rc.isbn
                 GROUP BY bk.isbn''')
-    print("ISBN\t\t\tStock\tOn Shelf\tTitle\t\t\t\t\tAuthor")
-    for row in cursor:
-        print(f"{row[0]}\t{row[3]}\t\t{row[4]}\t\t\t{row[1]}\t\t\t{row[2]}")
+    table = cursor.fetchall()
+    headings = ['ISBN','Title','Author','Stock','On Shelf']
+    print(tabulate(table, headers=headings))
 
 
 def print_loaned_books():
@@ -599,10 +600,9 @@ def print_loaned_books():
                 WHERE rc.returned = 'FALSE'
                 ORDER BY rc.isbn
                 ''')
-    print("ISBN\t\t\tTitle\t\t\t\tAuthor\t\t\tID\tName\tDate Borrowed")
-    for row in cursor:
-        print(
-            f"{row[0]}\t{row[1]}\t\t{row[2]}\t\t\t{row[3]}\t{row[4]}\t{row[5]}")
+    table = cursor.fetchall()
+    headings = ['ISBN','Title','Author','ID','Name', 'Date Borrowed']
+    print(tabulate(table, headers=headings))
 
 
 # ------------------------------------------------------------------------
@@ -790,10 +790,9 @@ Please select from the following options:
                 elif user_sub_choice == '1':
                     # Display all member records
                     cursor.execute('''SELECT * FROM users;''')
-                    print("ID\tUser Name\tFines\tRewards\tBorrow Limit")
-                    for row in cursor:
-                        print(
-                            f"{row[0]}\t{row[1]}\t\t{row[2]}\t\t{row[3]}\t\t{row[4]}")
+                    member_table = cursor.fetchall()
+                    table_headers = ['ID', 'Name', 'Fines', 'Rewards', 'Borrow Limit']
+                    print(tabulate(member_table, headers=table_headers))
 
                 elif user_sub_choice == '2':
                     # Add a member to the database
